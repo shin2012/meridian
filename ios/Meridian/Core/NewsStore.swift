@@ -244,16 +244,18 @@ final class NewsStore {
         let ids = items.filter { $0.needsTranslation && translatedTitles[$0.id] == nil }.map(\.id)
         guard !ids.isEmpty else { return }
         trWaiting.formUnion(ids)
-        trTask?.cancel()
+        guard trTask == nil else { return }          // 보내는 중이면 반복문이 이어서 보낸다
         trTask = Task {
+            defer { trTask = nil }
             try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            let batch = Array(trWaiting.prefix(200))
-            trWaiting.subtract(batch)
             struct Body: Encodable { let ids: [Int] }
-            guard let api, let raw = try? await api.send("POST", "translate/items", body: Body(ids: batch)),
-                  let got = try? JSONDecoder.meridian.decode([TranslatedItem].self, from: raw) else { return }
-            for t in got { translatedTitles[t.id] = t }
+            while !trWaiting.isEmpty {
+                let batch = Array(trWaiting.prefix(200))
+                trWaiting.subtract(batch)
+                guard let api, let raw = try? await api.send("POST", "translate/items", body: Body(ids: batch)),
+                      let got = try? JSONDecoder.meridian.decode([TranslatedItem].self, from: raw) else { return }
+                for t in got { translatedTitles[t.id] = t }
+            }
         }
     }
 

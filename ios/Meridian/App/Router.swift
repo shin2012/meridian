@@ -75,6 +75,10 @@ final class Router {
         case "search":
             tab = .search
             searchText = item("q") ?? ""
+        case "tab":
+            if let t = parts.first.flatMap(AppTab.init(rawValue:)) { tab = t; paths[t] = [] }
+        case "settings":
+            showSettings = true
         case "setup":
             setupPrefill = (item("server") ?? "", item("token") ?? "")
             showSetup = true

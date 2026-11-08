@@ -11,6 +11,13 @@ struct SettingsScreen: View {
     @State private var cacheSize = 0
     @State private var push = Push.shared
 
+    private var serverLabel: String {
+        #if DEBUG
+        if DemoLaunch.active { return "(점검용 서버)" }
+        #endif
+        return store.account?.server.host() ?? "없음"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -85,7 +92,7 @@ struct SettingsScreen: View {
                 }
 
                 Section("서버 연결") {
-                    LabeledContent("서버", value: store.account?.server.host() ?? "없음")
+                    LabeledContent("서버", value: serverLabel)
                     Button("연결 바꾸기") {
                         dismiss()
                         Task { try? await Task.sleep(for: .milliseconds(450)); router.showSetup = true }

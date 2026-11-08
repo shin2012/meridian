@@ -16,6 +16,9 @@ struct RootView: View {
                 SetupView()
             }
             .task {
+                #if DEBUG
+                await DemoLaunch.apply(store: store, router: router)
+                #endif
                 if !didPickStart {
                     didPickStart = true
                     router.tab = AppTab(view: store.ui.defaultView)
@@ -123,3 +126,22 @@ struct NowPlayingBar: View {
         .padding(.horizontal, 16)
     }
 }
+
+#if DEBUG
+/// CI 화면 점검용(디버그 빌드만): -demoServer <주소> -demoToken <토큰> -open <meridian://…>
+enum DemoLaunch {
+    static var active: Bool { UserDefaults.standard.string(forKey: "demoServer") != nil }
+
+    @MainActor static func apply(store: NewsStore, router: Router) async {
+        let ud = UserDefaults.standard
+        if !store.isConfigured, let s = ud.string(forKey: "demoServer"), let t = ud.string(forKey: "demoToken"),
+           let u = Account.normalize(s) {
+            try? await store.connect(Account(server: u, token: t))
+        }
+        if let o = ud.string(forKey: "open"), let url = URL(string: o) {
+            try? await Task.sleep(for: .milliseconds(300))
+            router.open(url)
+        }
+    }
+}
+#endif

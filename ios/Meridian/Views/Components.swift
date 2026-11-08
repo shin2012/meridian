@@ -75,6 +75,20 @@ struct BadgeView: View {
     }
 }
 
+/// 정해진 높이의 사진 칸. 사진 원래 크기가 레이아웃 폭을 밀어내지 않도록 빈 칸 위에 겹쳐 그린다.
+struct ImageBox: View {
+    let url: URL
+    var height: CGFloat
+    var radius: CGFloat = 14
+    var body: some View {
+        Color.secondary.opacity(0.06)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .overlay { RemoteImage(url: url) }
+            .clipShape(.rect(cornerRadius: radius))
+    }
+}
+
 /// 언론사 사진: 원본 주소 그대로. 못 불러오면 자리를 비운다.
 struct RemoteImage: View {
     let url: URL
@@ -141,7 +155,7 @@ struct ArticlePreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let s = item.imageUrl, let u = URL(string: s) {
-                RemoteImage(url: u).frame(height: 180).clipped()
+                ImageBox(url: u, height: 180, radius: 0)
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text("\(Flag.of(item.country)) \(item.source.name) · \(MeridianDate.ago(item.sortAt))")

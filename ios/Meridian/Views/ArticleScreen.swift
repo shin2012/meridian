@@ -81,8 +81,7 @@ struct ArticleScreen: View {
         let ui = store.ui
         VStack(alignment: .leading, spacing: 16) {
             if let hero = heroImage(o) {
-                RemoteImage(url: hero).frame(height: 240).frame(maxWidth: .infinity).clipped()
-                    .clipShape(.rect(cornerRadius: 20))
+                ImageBox(url: hero, height: 240, radius: 20)
             }
             HStack(spacing: 6) {
                 Text(Flag.of(o.item.country))
@@ -143,7 +142,7 @@ struct ArticleScreen: View {
     private func figure(_ im: ArticleImage) -> some View {
         if let u = URL(string: im.src) {
             VStack(alignment: .leading, spacing: 6) {
-                RemoteImage(url: u).frame(maxWidth: .infinity).frame(height: 220).clipped().clipShape(.rect(cornerRadius: 14))
+                ImageBox(url: u, height: 220)
                 if let alt = im.alt, !alt.isEmpty { Text(alt).font(.caption).foregroundStyle(.secondary) }
             }
         }

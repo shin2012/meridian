@@ -4,7 +4,7 @@ struct RootView: View {
     @Environment(NewsStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(ReadAloud.self) private var reader
-    @State private var didPickStart = false
+    @Environment(\.horizontalSizeClass) private var hsize
 
     var body: some View {
         @Bindable var router = router
@@ -19,10 +19,6 @@ struct RootView: View {
                 #if DEBUG
                 await DemoLaunch.apply(store: store, router: router)
                 #endif
-                if !didPickStart {
-                    didPickStart = true
-                    router.tab = AppTab(view: store.ui.defaultView)
-                }
                 await store.refreshAll()
             }
             .onChange(of: router.pendingBriefing) { _, on in
@@ -41,11 +37,16 @@ struct RootView: View {
             Tab("주제별", systemImage: "square.grid.3x2", value: AppTab.topics) {
                 TabRoot(tab: .topics) { TopicsScreen() }
             }
-            Tab("국가별", systemImage: "flag", value: AppTab.countries) {
-                TabRoot(tab: .countries) { CountriesScreen() }
+            Tab(hsize == .compact ? "국가·언론사" : "국가별", systemImage: "flag", value: AppTab.countries) {
+                TabRoot(tab: .countries) {
+                    if hsize == .compact { CountryOrSourceScreen() } else { CountriesScreen() }
+                }
             }
-            Tab("언론사별", systemImage: "newspaper", value: AppTab.sources) {
-                TabRoot(tab: .sources) { SourcesScreen() }
+            // 아이폰 탭 막대는 검색 포함 5칸 — 언론사별은 국가별 화면 안에서 고른다
+            if hsize != .compact {
+                Tab("언론사별", systemImage: "newspaper", value: AppTab.sources) {
+                    TabRoot(tab: .sources) { SourcesScreen() }
+                }
             }
             Tab("북마크", systemImage: "bookmark", value: AppTab.bookmarks) {
                 TabRoot(tab: .bookmarks) {
@@ -58,6 +59,12 @@ struct RootView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
+        .onChange(of: hsize) { _, h in
+            if h == .compact && router.tab == .sources { router.tab = .countries; router.sourcesMode = true }
+        }
+        .onChange(of: router.tab) { _, t in
+            if hsize == .compact && t == .sources { router.tab = .countries; router.sourcesMode = true }
+        }
     }
 }
 
@@ -145,3 +152,26 @@ enum DemoLaunch {
     }
 }
 #endif
+
+/// 아이폰: 국가별·언론사별을 한 탭에서 골라 본다
+struct CountryOrSourceScreen: View {
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        @Bindable var router = router
+        let mode = Binding(get: { router.sourcesMode ? 1 : 0 }, set: { router.sourcesMode = $0 == 1 })
+        return SwiftUI.Group {
+            if mode.wrappedValue == 0 { CountriesScreen() } else { SourcesScreen() }
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("보기", selection: mode) {
+                    Text("국가별").tag(0)
+                    Text("언론사별").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
+            }
+        }
+    }
+}

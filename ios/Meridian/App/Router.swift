@@ -36,9 +36,10 @@ struct FeedFilter: Hashable {
 final class Router {
     static let shared = Router()
 
-    var tab: AppTab = .digest
+    var tab: AppTab = AppTab(view: NewsStore.shared.ui.defaultView)   // 처음 화면(웹과 같은 설정)
     var paths: [AppTab: [Route]] = [:]
     var showSettings = false
+    var sourcesMode = false           // 아이폰 '국가·언론사' 탭에서 언론사별을 보여 줄지
     var showSetup = false
     var searchText = ""
     var pendingBriefing = false

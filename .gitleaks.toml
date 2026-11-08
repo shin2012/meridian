@@ -1,0 +1,13 @@
+title = "meridian"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "app-token-hex"
+description = "48자 이상 16진 토큰(앱 토큰 등)"
+regex = '''\b[0-9a-f]{40,}\b'''
+
+[[rules]]
+id = "bearer-literal"
+description = "코드에 박힌 Bearer 값"
+regex = '''Bearer [A-Za-z0-9_\-]{16,}'''

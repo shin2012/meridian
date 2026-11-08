@@ -1,0 +1,125 @@
+import SwiftUI
+
+struct RootView: View {
+    @Environment(NewsStore.self) private var store
+    @Environment(Router.self) private var router
+    @Environment(ReadAloud.self) private var reader
+    @State private var didPickStart = false
+
+    var body: some View {
+        @Bindable var router = router
+        tabs
+            .modifier(PlayerAccessory(active: reader.active))
+            .sheet(isPresented: $router.showSettings) { SettingsScreen() }
+            .fullScreenCover(isPresented: Binding(get: { !store.isConfigured || router.showSetup },
+                                                  set: { if !$0 { router.showSetup = false } })) {
+                SetupView()
+            }
+            .task {
+                if !didPickStart {
+                    didPickStart = true
+                    router.tab = AppTab(view: store.ui.defaultView)
+                }
+                await store.refreshAll()
+            }
+            .onChange(of: router.pendingBriefing) { _, on in
+                guard on, let d = store.digest else { return }
+                router.pendingBriefing = false
+                reader.playBriefing(d)
+            }
+    }
+
+    private var tabs: some View {
+        @Bindable var router = router
+        return TabView(selection: $router.tab) {
+            Tab("주요 뉴스", systemImage: "globe.asia.australia.fill", value: AppTab.digest) {
+                TabRoot(tab: .digest) { DigestScreen() }
+            }
+            Tab("주제별", systemImage: "square.grid.3x2", value: AppTab.topics) {
+                TabRoot(tab: .topics) { TopicsScreen() }
+            }
+            Tab("국가별", systemImage: "flag", value: AppTab.countries) {
+                TabRoot(tab: .countries) { CountriesScreen() }
+            }
+            Tab("언론사별", systemImage: "newspaper", value: AppTab.sources) {
+                TabRoot(tab: .sources) { SourcesScreen() }
+            }
+            Tab("북마크", systemImage: "bookmark", value: AppTab.bookmarks) {
+                TabRoot(tab: .bookmarks) {
+                    FeedScreen(filter: FeedFilter(title: "북마크", bookmarked: true))
+                }
+            }
+            Tab(value: AppTab.search, role: .search) {
+                TabRoot(tab: .search) { SearchScreen() }
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabBarMinimizeBehavior(.onScrollDown)
+    }
+}
+
+/// 읽어 주기 중일 때만 탭 막대 위에 작은 재생 막대(iOS 26 하단 보조 영역)
+private struct PlayerAccessory: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        if active {
+            content.tabViewBottomAccessory { NowPlayingBar() }
+        } else {
+            content
+        }
+    }
+}
+
+/// 탭마다 하나의 NavigationStack. 경로는 Router에 있어 알림·위젯 링크로 바로 들어갈 수 있다.
+struct TabRoot<Content: View>: View {
+    @Environment(Router.self) private var router
+    let tab: AppTab
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        NavigationStack(path: Binding(get: { router.paths[tab] ?? [] }, set: { router.paths[tab] = $0 })) {
+            content
+                .navigationDestination(for: Route.self) { r in
+                    switch r {
+                    case .article(let id): ArticleScreen(id: id)
+                    case .event(let id, let title): EventScreen(id: id, title: title)
+                    case .feed(let f): FeedScreen(filter: f)
+                    }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("설정", systemImage: "gearshape") { router.showSettings = true }
+                    }
+                }
+        }
+    }
+}
+
+struct NowPlayingBar: View {
+    @Environment(ReadAloud.self) private var reader
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "waveform")
+                .symbolEffect(.variableColor.iterative, isActive: reader.speaking && !reader.paused)
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(reader.track?.title ?? "").font(.subheadline.weight(.semibold)).lineLimit(1)
+                ProgressView(value: reader.progress).progressViewStyle(.linear).tint(.accentColor)
+            }
+            .onTapGesture {
+                if let id = reader.track?.articleID { router.push(.article(id)) }
+            }
+            Button { reader.previous() } label: { Image(systemName: "backward.fill") }
+            Button { reader.toggle() } label: {
+                Image(systemName: reader.paused || !reader.speaking ? "play.fill" : "pause.fill")
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            Button { reader.next() } label: { Image(systemName: "forward.fill") }
+            Button { reader.stop() } label: { Image(systemName: "xmark") }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+    }
+}

@@ -1,0 +1,14 @@
+# 비밀값·서버 정보는 절대 커밋하지 않는다
+.env
+*.env
+*.p8
+*.mobileprovision
+*.cer
+secrets/
+# iOS
+ios/build/
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.ipa
+.DS_Store

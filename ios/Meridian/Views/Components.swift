@@ -121,7 +121,9 @@ struct ArticleActions: ViewModifier {
                 }
                 Button("읽어 주기", systemImage: "speaker.wave.2") {
                     Task {
-                        if let d = store.cachedDetail(a.id) ?? (try? await store.detail(a.id)) { reader.playArticle(d) }
+                        var d = store.cachedDetail(a.id)
+                        if d == nil { d = try? await store.detail(a.id) }
+                        if let d { reader.playArticle(d) }
                     }
                 }
             } preview: {

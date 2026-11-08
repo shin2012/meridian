@@ -92,26 +92,59 @@ struct ArticlePage: Codable, Sendable {
     let nextCursor: String?
 }
 
-struct Country: Codable, Hashable, Identifiable, Sendable {
-    let code: String
-    let kind: String
-    let nameKo: String
-    let languages: [String]
-    let timezone: String
-    let sources: Int
-    let articles: Int
-    let articles24h: Int
-    var id: String { code }
+/// "articles_24h"는 snake_case 변환에서 "articles24H"가 된다(숫자 뒤 글자도 대문자로 바뀜). 두 표기 모두 받는다.
+struct AnyKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init(_ s: String) { stringValue = s }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { nil }
 }
 
-struct Source: Codable, Hashable, Identifiable, Sendable {
-    let id: Int
-    let slug: String
-    let name: String
-    let country: String
-    let homepage: String?
-    let paywall: String
-    let articles24h: Int
+extension Decoder {
+    func count24h() -> Int {
+        guard let c = try? container(keyedBy: AnyKey.self) else { return 0 }
+        for k in c.allKeys where k.stringValue.lowercased() == "articles24h" {
+            return (try? c.decode(Int.self, forKey: k)) ?? 0
+        }
+        return 0
+    }
+}
+
+struct Country: Codable, Hashable, Identifiable, Sendable {
+    let code: String
+    let kind: String?
+    let nameKo: String
+    let languages: [String]?
+    let timezone: String?
+    let sources: Int?
+    let articles: Int?
+    var articles24h: Int = 0
+    var id: String { code }
+
+    private enum CodingKeys: String, CodingKey { case code, kind, nameKo, languages, timezone, sources, articles }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = try c.decode(String.self, forKey: .code)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
+        nameKo = (try? c.decode(String.self, forKey: .nameKo)) ?? code
+        languages = try? c.decodeIfPresent([String].self, forKey: .languages)
+        timezone = try? c.decodeIfPresent(String.self, forKey: .timezone)
+        sources = try? c.decodeIfPresent(Int.self, forKey: .sources)
+        articles = try? c.decodeIfPresent(Int.self, forKey: .articles)
+        articles24h = decoder.count24h()
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: AnyKey.self)
+        try c.encode(code, forKey: AnyKey("code"))
+        try c.encodeIfPresent(kind, forKey: AnyKey("kind"))
+        try c.encode(nameKo, forKey: AnyKey("name_ko"))
+        try c.encodeIfPresent(languages, forKey: AnyKey("languages"))
+        try c.encodeIfPresent(timezone, forKey: AnyKey("timezone"))
+        try c.encodeIfPresent(sources, forKey: AnyKey("sources"))
+        try c.encodeIfPresent(articles, forKey: AnyKey("articles"))
+        try c.encode(articles24h, forKey: AnyKey("articles_24h"))
+    }
 }
 
 struct FeedGroup: Codable, Hashable, Identifiable, Sendable {
@@ -124,8 +157,22 @@ struct FeedGroup: Codable, Hashable, Identifiable, Sendable {
 struct Topic: Codable, Hashable, Identifiable, Sendable {
     let key: String
     let description: String
-    let articles24h: Int
+    var articles24h: Int = 0
     var id: String { key }
+
+    private enum CodingKeys: String, CodingKey { case key, description }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        description = (try? c.decode(String.self, forKey: .description)) ?? ""
+        articles24h = decoder.count24h()
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: AnyKey.self)
+        try c.encode(key, forKey: AnyKey("key"))
+        try c.encode(description, forKey: AnyKey("description"))
+        try c.encode(articles24h, forKey: AnyKey("articles_24h"))
+    }
 }
 
 struct DigestStats: Codable, Hashable, Sendable {

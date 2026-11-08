@@ -92,7 +92,7 @@ final class NewsStore {
         async let s: Void = refreshSettings()
         async let c: Void = refreshCountries()
         async let t: Void = refreshTopics()
-        async let d: Void = refreshDigest()
+        async let d = refreshDigest()
         _ = await (s, c, t, d)
         DiskCache.prune()
     }

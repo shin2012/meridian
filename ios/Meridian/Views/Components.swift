@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 
 // MARK: - 글자 크기(웹 설정 s/m/l)
 
@@ -90,16 +91,81 @@ struct ImageBox: View {
 }
 
 /// 언론사 사진: 원본 주소 그대로. 못 불러오면 자리를 비운다.
+/// 발열·메모리 방지: AsyncImage는 원본(수천 픽셀) 그대로 풀고 스크롤할 때마다 다시 받아서,
+/// 표시 크기에 맞게 줄여(ImageIO 썸네일) 메모리 캐시에 두고 다시 쓴다.
 struct RemoteImage: View {
     let url: URL
+    @State private var image: UIImage?
+
     var body: some View {
-        AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.2))) { phase in
-            switch phase {
-            case .success(let img): img.resizable().scaledToFill()
-            case .failure: Color.secondary.opacity(0.08)
-            default: Color.secondary.opacity(0.08)
+        GeometryReader { geo in
+            ZStack {
+                Color.secondary.opacity(0.08)
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height).clipped()
+                        .transition(.opacity)
+                }
+            }
+            .task(id: url) {
+                let side = max(geo.size.width, geo.size.height)
+                if let img = await ImagePipeline.shared.image(url, maxPoints: side > 0 ? side : 400) {
+                    withAnimation(.easeOut(duration: 0.2)) { image = img }
+                }
             }
         }
+    }
+}
+
+/// 줄인 사진 메모리 캐시 + 디스크(URLCache) 캐시. 같은 사진을 동시에 여러 번 받지 않는다.
+actor ImagePipeline {
+    static let shared = ImagePipeline()
+    private let memory: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.totalCostLimit = 48 << 20          // 약 48MB(줄인 비트맵 기준)
+        return c
+    }()
+    private var running: [String: Task<UIImage?, Never>] = [:]
+    private let session: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.urlCache = URLCache(memoryCapacity: 8 << 20, diskCapacity: 200 << 20)
+        c.requestCachePolicy = .returnCacheDataElseLoad
+        c.httpMaximumConnectionsPerHost = 4
+        c.timeoutIntervalForRequest = 20
+        return URLSession(configuration: c)
+    }()
+
+    func image(_ url: URL, maxPoints: CGFloat) async -> UIImage? {
+        let px = Int(min(maxPoints, 1200) * 3)          // 화면 배율 3 기준, 상한 3600px
+        let key = "\(url.absoluteString)#\(px)" as NSString
+        if let hit = memory.object(forKey: key) { return hit }
+        if let t = running[key as String] { return await t.value }
+        let t = Task<UIImage?, Never> { [session] in
+            var req = URLRequest(url: url)
+            req.setValue(nil, forHTTPHeaderField: "Referer")
+            guard let (data, _) = try? await session.data(for: req) else { return nil }
+            return Self.downsample(data, maxPixel: px)
+        }
+        running[key as String] = t
+        let img = await t.value
+        running[key as String] = nil
+        if let img {
+            let cost = Int(img.size.width * img.size.height * img.scale * img.scale * 4)
+            memory.setObject(img, forKey: key, cost: cost)
+        }
+        return img
+    }
+
+    nonisolated static func downsample(_ data: Data, maxPixel: Int) -> UIImage? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
     }
 }
 

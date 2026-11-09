@@ -53,9 +53,14 @@ final class NewsStore {
             translatedTitles = [:]
             deviceBusy = []
             deviceMissing = []
+            devQueue = []
+            devSessions = [:]
         }
     }
     private var deviceBusy: Set<Int> = []
+    private var devQueue: [ArticleItem] = []
+    private var devTask: Task<Void, Never>?
+    private var devSessions: [String: TranslationSession] = [:]
     private var deviceMissing: Set<String> = []     // 언어팩이 없어 기기 번역이 안 되는 언어(서버로 넘김)
 
     /// 목록 요청에 붙이는 번역 언어. 기기 번역이면 서버 번역본을 받지 않고 원문을 받아 기기에서 옮긴다.
@@ -281,39 +286,60 @@ final class NewsStore {
     }
 
     /// 아이폰 기본 번역으로 목록 제목·요약을 옮긴다. 언어팩이 없는 언어의 기사는 돌려줘서 서버가 번역하게 한다.
+    /// 발열 방지: 목록마다 세션을 동시에 여러 개 돌리지 않고 한 줄로 세워 20건씩 차례로, 언어별 세션은 다시 쓴다.
     private func deviceTitles(_ items: [ArticleItem]) -> [ArticleItem] {
         let todo = items.filter { $0.needsTranslation && translatedTitles[$0.id] == nil && !deviceBusy.contains($0.id) }
         let missing = todo.filter { deviceMissing.contains($0.language ?? "") || ($0.language ?? "").isEmpty }
         let mine = todo.filter { !(deviceMissing.contains($0.language ?? "") || ($0.language ?? "").isEmpty) }
         guard !mine.isEmpty else { return missing }
         deviceBusy.formUnion(mine.map(\.id))
-        let groups = Dictionary(grouping: mine) { $0.language ?? "" }
-        Task {
-            for (code, list) in groups {
-                var reqs: [TranslationSession.Request] = []
-                for a in list {
-                    if let t = a.title, !t.isEmpty { reqs.append(.init(sourceText: t, clientIdentifier: "t\(a.id)")) }
-                    if let s = a.summary, !s.isEmpty { reqs.append(.init(sourceText: s, clientIdentifier: "s\(a.id)")) }
-                }
-                let session = TranslationSession(installedSource: Locale.Language(identifier: code),
-                                                 target: Locale.Language(identifier: "ko"))
-                do {
-                    let res = try await session.translations(from: reqs)
-                    var title: [Int: String] = [:], sum: [Int: String] = [:]
-                    for r in res {
-                        guard let k = r.clientIdentifier, let id = Int(k.dropFirst()) else { continue }
-                        if k.hasPrefix("t") { title[id] = r.targetText } else { sum[id] = r.targetText }
-                    }
-                    for a in list { translatedTitles[a.id] = TranslatedItem(id: a.id, title: title[a.id], summary: sum[a.id]) }
-                } catch {
-                    // 언어팩 없음 등 → 이 언어는 서버 번역으로
-                    deviceMissing.insert(code)
-                    deviceBusy.subtract(list.map(\.id))
-                    requestTitles(list)
+        devQueue.append(contentsOf: mine)
+        if devTask == nil { devTask = Task { await drainDeviceQueue(); devTask = nil } }
+        return missing
+    }
+
+    private func drainDeviceQueue() async {
+        let ko = Locale.Language(identifier: "ko")
+        while let first = devQueue.first {
+            let code = first.language ?? ""
+            let batch = Array(devQueue.filter { ($0.language ?? "") == code }.prefix(20))
+            let ids = Set(batch.map(\.id))
+            devQueue.removeAll { ids.contains($0.id) }
+            if deviceMissing.contains(code) { deviceBusy.subtract(ids); requestTitles(batch); continue }
+            var session = devSessions[code]
+            if session == nil {
+                let src = Locale.Language(identifier: code)
+                if await LanguageAvailability().status(from: src, to: ko) == .installed {
+                    session = TranslationSession(installedSource: src, target: ko)
+                    devSessions[code] = session
                 }
             }
+            guard let session else {
+                deviceMissing.insert(code)            // 언어팩 없음 → 이 언어는 서버 번역으로
+                deviceBusy.subtract(ids)
+                requestTitles(batch)
+                continue
+            }
+            var reqs: [TranslationSession.Request] = []
+            for a in batch {
+                if let t = a.title, !t.isEmpty { reqs.append(.init(sourceText: t, clientIdentifier: "t\(a.id)")) }
+                if let s = a.summary, !s.isEmpty { reqs.append(.init(sourceText: String(s.prefix(400)), clientIdentifier: "s\(a.id)")) }
+            }
+            do {
+                let res = try await session.translations(from: reqs)
+                var title: [Int: String] = [:], sum: [Int: String] = [:]
+                for r in res {
+                    guard let k = r.clientIdentifier, let id = Int(k.dropFirst()) else { continue }
+                    if k.hasPrefix("t") { title[id] = r.targetText } else { sum[id] = r.targetText }
+                }
+                for a in batch { translatedTitles[a.id] = TranslatedItem(id: a.id, title: title[a.id], summary: sum[a.id]) }
+            } catch {
+                deviceMissing.insert(code)
+                devSessions[code] = nil
+                deviceBusy.subtract(ids)
+                requestTitles(batch)
+            }
         }
-        return missing
     }
 
     /// 기사 화면에서 기기 번역이 성공하면(언어팩을 받았을 수 있음) 그 언어를 다시 기기 번역 대상으로

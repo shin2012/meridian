@@ -264,8 +264,8 @@ final class NewsStore {
         guard ui.translate, isConfigured else { return }
         var items = items
         if trEngine == .device {
-            items = deviceTitles(items)       // 언어팩이 없는 언어만 서버로
-            if items.isEmpty { return }
+            deviceTitles(items)               // 기기 번역만. 언어팩이 없으면 원문 그대로(서버로 넘기지 않음)
+            return
         }
         let ids = items.filter { $0.needsTranslation && translatedTitles[$0.id] == nil }.map(\.id)
         guard !ids.isEmpty else { return }
@@ -285,17 +285,15 @@ final class NewsStore {
         }
     }
 
-    /// 아이폰 기본 번역으로 목록 제목·요약을 옮긴다. 언어팩이 없는 언어의 기사는 돌려줘서 서버가 번역하게 한다.
+    /// 아이폰 기본 번역으로 목록 제목·요약을 옮긴다. 언어팩이 없는 언어는 원문 그대로 둔다(서버로 넘기지 않음).
     /// 발열 방지: 목록마다 세션을 동시에 여러 개 돌리지 않고 한 줄로 세워 20건씩 차례로, 언어별 세션은 다시 쓴다.
-    private func deviceTitles(_ items: [ArticleItem]) -> [ArticleItem] {
+    private func deviceTitles(_ items: [ArticleItem]) {
         let todo = items.filter { $0.needsTranslation && translatedTitles[$0.id] == nil && !deviceBusy.contains($0.id) }
-        let missing = todo.filter { deviceMissing.contains($0.language ?? "") || ($0.language ?? "").isEmpty }
         let mine = todo.filter { !(deviceMissing.contains($0.language ?? "") || ($0.language ?? "").isEmpty) }
-        guard !mine.isEmpty else { return missing }
+        guard !mine.isEmpty else { return }
         deviceBusy.formUnion(mine.map(\.id))
         devQueue.append(contentsOf: mine)
         if devTask == nil { devTask = Task { await drainDeviceQueue(); devTask = nil } }
-        return missing
     }
 
     private func drainDeviceQueue() async {
@@ -305,7 +303,7 @@ final class NewsStore {
             let batch = Array(devQueue.filter { ($0.language ?? "") == code }.prefix(20))
             let ids = Set(batch.map(\.id))
             devQueue.removeAll { ids.contains($0.id) }
-            if deviceMissing.contains(code) { deviceBusy.subtract(ids); requestTitles(batch); continue }
+            if deviceMissing.contains(code) { deviceBusy.subtract(ids); continue }
             var session = devSessions[code]
             if session == nil {
                 let src = Locale.Language(identifier: code)
@@ -315,9 +313,8 @@ final class NewsStore {
                 }
             }
             guard let session else {
-                deviceMissing.insert(code)            // 언어팩 없음 → 이 언어는 서버 번역으로
+                deviceMissing.insert(code)            // 언어팩 없음 → 원문 그대로
                 deviceBusy.subtract(ids)
-                requestTitles(batch)
                 continue
             }
             var reqs: [TranslationSession.Request] = []
@@ -337,7 +334,6 @@ final class NewsStore {
                 deviceMissing.insert(code)
                 devSessions[code] = nil
                 deviceBusy.subtract(ids)
-                requestTitles(batch)
             }
         }
     }

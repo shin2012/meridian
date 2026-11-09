@@ -289,7 +289,7 @@ struct ArticleScreen: View {
 
     /// 아이폰 기본 번역. 언어가 이미 설치돼 있으면 세션을 바로 만들어 번역하고(.translationTask를 거치면
     /// 기기에서 "번역하는 중…"에 멈추는 일이 있었다), 설치가 필요할 때만 .translationTask로 내려받기를 묻는다.
-    /// 어느 쪽이든 40초 안에 끝나지 않거나 지원하지 않는 언어면 서버 번역으로 넘긴다.
+    /// 40초 안에 끝나지 않거나 지원하지 않는 언어면 멈추고 알린다(서버로 넘기지 않음).
     private func deviceTranslateStart(_ o: ArticleDetail) {
         serverTr = nil
         deviceTr = nil
@@ -305,8 +305,7 @@ struct ArticleScreen: View {
             Task {
                 try? await Task.sleep(for: .seconds(limit))
                 if trBusy, deviceTr == nil, serverTr == nil, orig?.item.id == o.item.id {
-                    trNote = "아이폰 번역이 응답하지 않아 서버로 번역합니다."
-                    await serverTranslateNow(keepNote: true)
+                    deviceFail("아이폰 번역이 응답하지 않습니다. 원문을 보여 드려요.")
                 }
             }
             switch status {
@@ -319,11 +318,17 @@ struct ArticleScreen: View {
                     trConfig = TranslationSession.Configuration(source: src, target: ko)
                 } else { trConfig?.invalidate() }
             default:
-                trNote = "아이폰 번역이 이 언어를 지원하지 않아 서버로 번역합니다."
-                await serverTranslateNow(keepNote: true)
+                deviceFail("아이폰 번역이 이 언어를 지원하지 않습니다. 원문을 보여 드려요.")
                 return
             }
         }
+    }
+
+    /// 기기 번역이 안 되면 서버로 넘기지 않고 멈춘 뒤 이유를 알린다(사용자 결정)
+    private func deviceFail(_ msg: String) {
+        trNote = msg
+        showTr = false
+        trBusy = false
     }
 
     private func serverTranslateNow(keepNote: Bool = false) async {
@@ -359,8 +364,7 @@ struct ArticleScreen: View {
             trNote = nil
             store.deviceLanguageReady(o.item.language)
         } catch {
-            trNote = "아이폰 번역에 실패해 서버로 번역합니다."
-            await serverTranslateNow(keepNote: true)
+            deviceFail("아이폰 번역에 실패했습니다. 원문을 보여 드려요.")
             return
         }
         trBusy = false

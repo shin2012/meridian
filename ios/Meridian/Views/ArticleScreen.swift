@@ -287,21 +287,50 @@ struct ArticleScreen: View {
         }
     }
 
+    /// 아이폰 기본 번역. 언어가 이미 설치돼 있으면 세션을 바로 만들어 번역하고(.translationTask를 거치면
+    /// 기기에서 "번역하는 중…"에 멈추는 일이 있었다), 설치가 필요할 때만 .translationTask로 내려받기를 묻는다.
+    /// 어느 쪽이든 40초 안에 끝나지 않거나 지원하지 않는 언어면 서버 번역으로 넘긴다.
     private func deviceTranslateStart(_ o: ArticleDetail) {
         serverTr = nil
-        showTr = true
-        trBusy = true
-        let src = o.item.language.map { Locale.Language(identifier: $0) }
-        if trConfig == nil {
-            trConfig = TranslationSession.Configuration(source: src, target: Locale.Language(identifier: "ko"))
-        } else { trConfig?.invalidate() }
-    }
-
-    private func serverTranslateNow() async {
         deviceTr = nil
         showTr = true
         trBusy = true
-        trNote = nil
+        let code = o.item.language ?? ""
+        let src = Locale.Language(identifier: code)
+        let ko = Locale.Language(identifier: "ko")
+        Task {
+            let status = await LanguageAvailability().status(from: src, to: ko)
+            // 멈춤 방지: 결과가 없으면 서버로(언어 내려받기를 묻는 경우는 넉넉히)
+            let limit: Double = status == .installed ? 40 : 180
+            Task {
+                try? await Task.sleep(for: .seconds(limit))
+                if trBusy, deviceTr == nil, serverTr == nil, orig?.item.id == o.item.id {
+                    trNote = "아이폰 번역이 응답하지 않아 서버로 번역합니다."
+                    await serverTranslateNow(keepNote: true)
+                }
+            }
+            switch status {
+            case .installed:
+                let session = TranslationSession(installedSource: src, target: ko)
+                await deviceTranslate(session)
+            case .supported:
+                trNote = "아이폰에 번역 언어를 내려받아야 합니다."
+                if trConfig == nil {
+                    trConfig = TranslationSession.Configuration(source: src, target: ko)
+                } else { trConfig?.invalidate() }
+            default:
+                trNote = "아이폰 번역이 이 언어를 지원하지 않아 서버로 번역합니다."
+                await serverTranslateNow(keepNote: true)
+                return
+            }
+        }
+    }
+
+    private func serverTranslateNow(keepNote: Bool = false) async {
+        deviceTr = nil
+        showTr = true
+        trBusy = true
+        if !keepNote { trNote = nil }
         do {
             serverTr = try await store.serverTranslate(id)
         } catch {
@@ -330,8 +359,9 @@ struct ArticleScreen: View {
             trNote = nil
             store.deviceLanguageReady(o.item.language)
         } catch {
-            trNote = "번역하지 못했습니다. 원문을 보여 드려요."
-            showTr = false
+            trNote = "아이폰 번역에 실패해 서버로 번역합니다."
+            await serverTranslateNow(keepNote: true)
+            return
         }
         trBusy = false
     }

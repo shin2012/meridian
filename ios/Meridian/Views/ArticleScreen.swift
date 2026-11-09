@@ -263,6 +263,10 @@ struct ArticleScreen: View {
         showTr = true
         trBusy = true
         trNote = nil
+        if store.trEngine == .device {
+            deviceTranslateStart(o)
+            return
+        }
         if let cached = store.cachedDetail(id), cached.item.translated {
             serverTr = cached
             trBusy = false
@@ -283,6 +287,29 @@ struct ArticleScreen: View {
         }
     }
 
+    private func deviceTranslateStart(_ o: ArticleDetail) {
+        serverTr = nil
+        showTr = true
+        trBusy = true
+        let src = o.item.language.map { Locale.Language(identifier: $0) }
+        if trConfig == nil {
+            trConfig = TranslationSession.Configuration(source: src, target: Locale.Language(identifier: "ko"))
+        } else { trConfig?.invalidate() }
+    }
+
+    private func serverTranslateNow() async {
+        deviceTr = nil
+        showTr = true
+        trBusy = true
+        trNote = nil
+        do {
+            serverTr = try await store.serverTranslate(id)
+        } catch {
+            trNote = "서버 번역에 실패했습니다. 잠시 뒤 다시 해 주세요."
+        }
+        trBusy = false
+    }
+
     private func deviceTranslate(_ session: TranslationSession) async {
         guard let o = orig else { return }
         var texts: [String] = [o.item.displayTitle, o.item.summary ?? ""]
@@ -301,6 +328,7 @@ struct ArticleScreen: View {
                 paragraphs: Array(out[2..<(2 + np)]),
                 captions: out[(2 + np)...].map { $0.isEmpty ? nil : $0 })
             trNote = nil
+            store.deviceLanguageReady(o.item.language)
         } catch {
             trNote = "번역하지 못했습니다. 원문을 보여 드려요."
             showTr = false
@@ -345,14 +373,10 @@ struct ArticleScreen: View {
                                 if serverTr != nil || deviceTr != nil { showTr = true } else { Task { await translate() } }
                             }
                         }
-                        Button("아이폰에서 번역", systemImage: "iphone") {
-                            serverTr = nil
-                            showTr = true
-                            trBusy = true
-                            let src = o.item.language.map { Locale.Language(identifier: $0) }
-                            if trConfig == nil {
-                                trConfig = TranslationSession.Configuration(source: src, target: Locale.Language(identifier: "ko"))
-                            } else { trConfig?.invalidate() }
+                        if store.trEngine == .device {
+                            Button("서버(Claude)로 번역", systemImage: "server.rack") { Task { await serverTranslateNow() } }
+                        } else {
+                            Button("아이폰에서 번역", systemImage: "iphone") { deviceTranslateStart(o) }
                         }
                     }
                     Button("원문 보기(웹)", systemImage: "safari") { showWeb = true }

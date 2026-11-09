@@ -1,6 +1,7 @@
 import CoreSpotlight
 import Foundation
 import Observation
+import Translation
 import WidgetKit
 
 /// 앱 전체 상태. 화면은 먼저 디스크에 있는 마지막 응답을 그리고, 네트워크에서 새로 받아 바꾼다.
@@ -43,7 +44,22 @@ final class NewsStore {
 
     struct SettingsDoc: Codable { var ui: UiSettings? }
 
-    var lang: String? { ui.translate ? "ko" : nil }
+    /// 번역 엔진(이 기기에만 저장): 서버(Claude 우선) 또는 아이폰 기본 번역(Apple 번역, 기기 안에서)
+    enum TrEngine: String, CaseIterable, Sendable { case server, device }
+    var trEngine: TrEngine = TrEngine(rawValue: UserDefaults.standard.string(forKey: "trEngine") ?? "") ?? .server {
+        didSet {
+            guard oldValue != trEngine else { return }
+            UserDefaults.standard.set(trEngine.rawValue, forKey: "trEngine")
+            translatedTitles = [:]
+            deviceBusy = []
+            deviceMissing = []
+        }
+    }
+    private var deviceBusy: Set<Int> = []
+    private var deviceMissing: Set<String> = []     // 언어팩이 없어 기기 번역이 안 되는 언어(서버로 넘김)
+
+    /// 목록 요청에 붙이는 번역 언어. 기기 번역이면 서버 번역본을 받지 않고 원문을 받아 기기에서 옮긴다.
+    var lang: String? { ui.translate && trEngine == .server ? "ko" : nil }
     var digestQuery: [String: String?] { ["samples": "4", "lang": "ko"] }
 
     // MARK: 연결
@@ -185,7 +201,7 @@ final class NewsStore {
         var a = a
         if let b = bookmarkOverride[a.id] { a.bookmarked = b }
         if let r = readOverride[a.id] { a.read = r }
-        if lang != nil, a.needsTranslation, let t = translatedTitles[a.id], let title = t.title {
+        if ui.translate, a.needsTranslation, let t = translatedTitles[a.id], let title = t.title {
             a.title = title
             a.summary = t.summary ?? a.summary
             a.translated = true
@@ -240,7 +256,12 @@ final class NewsStore {
     // MARK: 목록 번역(웹과 같이 400ms 모아서 한 번에)
 
     func requestTitles(_ items: [ArticleItem]) {
-        guard lang != nil, isConfigured else { return }
+        guard ui.translate, isConfigured else { return }
+        var items = items
+        if trEngine == .device {
+            items = deviceTitles(items)       // 언어팩이 없는 언어만 서버로
+            if items.isEmpty { return }
+        }
         let ids = items.filter { $0.needsTranslation && translatedTitles[$0.id] == nil }.map(\.id)
         guard !ids.isEmpty else { return }
         trWaiting.formUnion(ids)
@@ -257,6 +278,47 @@ final class NewsStore {
                 for t in got { translatedTitles[t.id] = t }
             }
         }
+    }
+
+    /// 아이폰 기본 번역으로 목록 제목·요약을 옮긴다. 언어팩이 없는 언어의 기사는 돌려줘서 서버가 번역하게 한다.
+    private func deviceTitles(_ items: [ArticleItem]) -> [ArticleItem] {
+        let todo = items.filter { $0.needsTranslation && translatedTitles[$0.id] == nil && !deviceBusy.contains($0.id) }
+        let missing = todo.filter { deviceMissing.contains($0.language ?? "") || ($0.language ?? "").isEmpty }
+        let mine = todo.filter { !(deviceMissing.contains($0.language ?? "") || ($0.language ?? "").isEmpty) }
+        guard !mine.isEmpty else { return missing }
+        deviceBusy.formUnion(mine.map(\.id))
+        let groups = Dictionary(grouping: mine) { $0.language ?? "" }
+        Task {
+            for (code, list) in groups {
+                var reqs: [TranslationSession.Request] = []
+                for a in list {
+                    if let t = a.title, !t.isEmpty { reqs.append(.init(sourceText: t, clientIdentifier: "t\(a.id)")) }
+                    if let s = a.summary, !s.isEmpty { reqs.append(.init(sourceText: s, clientIdentifier: "s\(a.id)")) }
+                }
+                let session = TranslationSession(installedSource: Locale.Language(identifier: code),
+                                                 target: Locale.Language(identifier: "ko"))
+                do {
+                    let res = try await session.translations(from: reqs)
+                    var title: [Int: String] = [:], sum: [Int: String] = [:]
+                    for r in res {
+                        guard let k = r.clientIdentifier, let id = Int(k.dropFirst()) else { continue }
+                        if k.hasPrefix("t") { title[id] = r.targetText } else { sum[id] = r.targetText }
+                    }
+                    for a in list { translatedTitles[a.id] = TranslatedItem(id: a.id, title: title[a.id], summary: sum[a.id]) }
+                } catch {
+                    // 언어팩 없음 등 → 이 언어는 서버 번역으로
+                    deviceMissing.insert(code)
+                    deviceBusy.subtract(list.map(\.id))
+                    requestTitles(list)
+                }
+            }
+        }
+        return missing
+    }
+
+    /// 기사 화면에서 기기 번역이 성공하면(언어팩을 받았을 수 있음) 그 언어를 다시 기기 번역 대상으로
+    func deviceLanguageReady(_ code: String?) {
+        if let code { deviceMissing.remove(code) }
     }
 
     // MARK: 위젯

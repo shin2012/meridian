@@ -39,6 +39,20 @@ struct SettingsScreen: View {
                 }
 
                 Section {
+                    Picker("번역 엔진", selection: Binding(get: { store.trEngine }, set: { store.trEngine = $0 })) {
+                        Text("Claude(서버)").tag(NewsStore.TrEngine.server)
+                        Text("아이폰 기본 번역").tag(NewsStore.TrEngine.device)
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("기사 제목·본문 번역")
+                } footer: {
+                    Text(store.trEngine == .server
+                         ? "서버에서 Claude로 번역하고 저장해 둡니다(Claude가 안 되면 구글·Gemini). 웹과 같은 번역을 봅니다."
+                         : "아이폰 안에서 Apple 번역으로 옮깁니다(인터넷 없이, 기사 내용이 기기 밖으로 나가지 않음). 처음 보는 언어는 기사를 열 때 언어 내려받기를 묻고, 받기 전까지 목록 제목은 서버가 번역합니다.")
+                }
+
+                Section {
                     NavigationLink("국가 순서 · 표시") { CountryOrderScreen(ui: $ui) }
                 } footer: {
                     Text("보기 설정은 웹(세계 뉴스)과 같이 씁니다.")

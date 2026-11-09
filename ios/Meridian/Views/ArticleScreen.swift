@@ -221,7 +221,7 @@ struct ArticleScreen: View {
                 summary = .busy("기기 AI")
                 do {
                     let body = s.paragraphs.isEmpty ? (s.summary ?? "") : s.paragraphs.joined(separator: "\n")
-                    let text = try await DeviceAI.summarize(title: s.title, body: body)
+                    let text = try await DeviceAI.summarize(title: s.title, body: body, source: o.item.source.name)
                     summary = .done(text: text, by: "기기 AI 요약 · 인터넷 없이")
                     return
                 } catch {

@@ -157,7 +157,7 @@ struct MinorEventRow: View {
     }
 }
 
-/// 사건 하나: 나라별 관련 기사 전체 + (기기 AI) 나라별 관점 비교
+/// 사건 하나: 최신순 관련 기사 전체 + (기기 AI) 나라별 관점 비교
 struct EventScreen: View {
     @Environment(NewsStore.self) private var store
     let id: Int
@@ -201,13 +201,12 @@ struct EventScreen: View {
                     }
                 }
             }
-            let byCountry = Dictionary(grouping: items, by: \.country)
-            ForEach(byCountry.keys.sorted { (byCountry[$0]?.count ?? 0) > (byCountry[$1]?.count ?? 0) }, id: \.self) { c in
-                Section("\(Flag.of(c)) \(store.countryName(c)) · \(byCountry[c]?.count ?? 0)건") {
-                    ForEach(byCountry[c] ?? []) { a in
-                        NavigationLink(value: Route.article(a.id)) { ArticleRow(item: a, compact: true) }
-                            .articleActions(a)
-                    }
+            Section("관련 기사 · 최신순 · \(items.count)건") {
+                ForEach(items.sorted {
+                    $0.sortAt == $1.sortAt ? $0.id > $1.id : $0.sortAt > $1.sortAt
+                }) { a in
+                    NavigationLink(value: Route.article(a.id)) { ArticleRow(item: a, compact: true) }
+                        .articleActions(a)
                 }
             }
             if loading && items.isEmpty { LoadingRow() }

@@ -570,6 +570,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "kr.b-612.meridian";
+				EXECUTABLE_NAME = Meridian;
 				PRODUCT_MODULE_NAME = MeridianMac;
 				PRODUCT_NAME = "자오선";
 			};
@@ -602,6 +603,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "kr.b-612.meridian";
+				EXECUTABLE_NAME = Meridian;
 				PRODUCT_MODULE_NAME = MeridianMac;
 				PRODUCT_NAME = "자오선";
 			};

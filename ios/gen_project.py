@@ -100,6 +100,7 @@ def mac_settings(kind: str) -> dict:
             "INFOPLIST_KEY_LSApplicationCategoryType": '"public.app-category.news"',
             "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/../Frameworks",\n\t\t\t\t)',
             "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}"',
+            "EXECUTABLE_NAME": "Meridian",
             "PRODUCT_MODULE_NAME": "MeridianMac",
             "PRODUCT_NAME": '"자오선"',
         })

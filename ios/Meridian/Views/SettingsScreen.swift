@@ -170,7 +170,7 @@ struct CountryOrderScreen: View {
                 ui.order = list
             }
         }
-        .environment(\.editMode, .constant(.active))
+        .editModeActive()
         .navigationTitle("국가 순서 · 표시")
     }
 }

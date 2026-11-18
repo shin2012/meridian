@@ -72,6 +72,13 @@ extension View {
         sheet(isPresented: isPresented) { content().frame(minWidth: 480, minHeight: 520) }
         #endif
     }
+    @ViewBuilder func editModeActive() -> some View {
+        #if os(iOS)
+        environment(\.editMode, .constant(.active))
+        #else
+        self
+        #endif
+    }
     @ViewBuilder func minimizeTabBarOnScroll() -> some View {
         #if os(iOS)
         tabBarMinimizeBehavior(.onScrollDown)

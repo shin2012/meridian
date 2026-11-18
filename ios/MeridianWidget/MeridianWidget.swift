@@ -56,8 +56,12 @@ struct TopNewsWidget: Widget {
         }
         .configurationDisplayName("주요 뉴스")
         .description("여러 나라 언론이 함께 다룬 사건 순위. 1시간마다 바뀝니다.")
+        #if os(iOS)
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge,
                             .accessoryRectangular, .accessoryInline])
+        #else
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
+        #endif
     }
 }
 

@@ -3,7 +3,11 @@ import SwiftUI
 /// 주제별(칸반): Jev로 분류한 8개 주제. 아이패드는 열을 나란히, 아이폰은 주제를 골라 한 열씩.
 struct TopicsScreen: View {
     @Environment(NewsStore.self) private var store
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hsize
+    #else
+    private let hsize: SizeClassShim? = .regular
+    #endif
     @State private var country: String?
     @State private var topic: String?
 
@@ -24,7 +28,7 @@ struct TopicsScreen: View {
             }
         }
         .navigationTitle("주제별")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
     }
 
     private var board: some View {
@@ -119,7 +123,7 @@ struct CountriesScreen: View {
             }
             if groups.isEmpty { LoadingRow() }
         }
-        .listStyle(.insetGrouped)
+        .groupedList()
         .navigationTitle("국가별")
         .task { await load() }
         .refreshable { await Task { await load() }.value }
@@ -171,7 +175,7 @@ struct SourcesScreen: View {
             }
             if loading && groups.isEmpty { LoadingRow() }
         }
-        .listStyle(.insetGrouped)
+        .groupedList()
         .navigationTitle("언론사별")
         .task(id: current) { await load() }
         .refreshable { await Task { await load() }.value }

@@ -59,7 +59,7 @@ struct ArticleScreen: View {
             }
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
         .toolbar { toolbar }
         .task(id: id) { await load() }
         .translationTask(trConfig) { session in await deviceTranslate(session) }
@@ -376,14 +376,14 @@ struct ArticleScreen: View {
     private var toolbar: some ToolbarContent {
         if let o = orig {
             let a = store.apply(o.item)
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .barTrailing) {
                 Button(store.isBookmarked(a) ? "북마크 해제" : "북마크",
                        systemImage: store.isBookmarked(a) ? "bookmark.fill" : "bookmark") {
                     store.setBookmark(a, !store.isBookmarked(a))
                 }
                 .sensoryFeedback(.selection, trigger: store.isBookmarked(a))
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .barTrailing) {
                 Button("읽어 주기", systemImage: reader.track?.articleID == o.item.id ? "speaker.wave.2.fill" : "speaker.wave.2") {
                     if reader.track?.articleID == o.item.id { reader.toggle() } else {
                         var d = serverTr ?? o
@@ -397,7 +397,7 @@ struct ArticleScreen: View {
                     }
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .barTrailing) {
                 Menu {
                     if o.item.isForeign {
                         if showTr && (serverTr != nil || deviceTr != nil) {
@@ -439,10 +439,10 @@ struct OriginalWebView: View {
             WebView(page)
                 .ignoresSafeArea(edges: .bottom)
                 .navigationTitle(page.title.isEmpty ? (url.host() ?? "원문") : page.title)
-                .navigationBarTitleDisplayMode(.inline)
+                .inlineTitle()
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { Button("닫기", systemImage: "xmark") { dismiss() } }
-                    ToolbarItem(placement: .topBarTrailing) { Link(destination: url) { Image(systemName: "safari") } }
+                    ToolbarItem(placement: .barLeading) { Button("닫기", systemImage: "xmark") { dismiss() } }
+                    ToolbarItem(placement: .barTrailing) { Link(destination: url) { Image(systemName: "safari") } }
                 }
                 .overlay(alignment: .top) {
                     if page.isLoading {

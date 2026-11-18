@@ -95,7 +95,9 @@ final class ReadAloud: NSObject {
         paused = false
         index = 0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
     }
 
     private func speakCurrent() {
@@ -133,9 +135,11 @@ final class ReadAloud: NSObject {
     }
 
     private func configureSession() {
+        #if os(iOS)
         let s = AVAudioSession.sharedInstance()
         try? s.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         try? s.setActive(true)
+        #endif
     }
 
     private func setupCommands() {

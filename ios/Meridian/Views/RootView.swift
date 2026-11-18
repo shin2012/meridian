@@ -4,14 +4,18 @@ struct RootView: View {
     @Environment(NewsStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(ReadAloud.self) private var reader
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hsize
+    #else
+    private let hsize: SizeClassShim? = .regular
+    #endif
 
     var body: some View {
         @Bindable var router = router
         tabs
             .modifier(PlayerAccessory(active: reader.active))
             .sheet(isPresented: $router.showSettings) { SettingsScreen() }
-            .fullScreenCover(isPresented: Binding(get: { !store.isConfigured || router.showSetup },
+            .coverOrSheet(isPresented: Binding(get: { !store.isConfigured || router.showSetup },
                                                   set: { if !$0 { router.showSetup = false } })) {
                 SetupView()
             }
@@ -58,7 +62,7 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .tabBarMinimizeBehavior(.onScrollDown)
+        .minimizeTabBarOnScroll()
         .onChange(of: hsize) { _, h in
             if h == .compact && router.tab == .sources { router.tab = .countries; router.sourcesMode = true }
         }
@@ -72,11 +76,21 @@ struct RootView: View {
 private struct PlayerAccessory: ViewModifier {
     let active: Bool
     func body(content: Content) -> some View {
+        #if os(iOS)
         if active {
             content.tabViewBottomAccessory { NowPlayingBar() }
         } else {
             content
         }
+        #else
+        content.safeAreaInset(edge: .bottom) {
+            if active {
+                NowPlayingBar()
+                    .padding(.vertical, 8)
+                    .background(.bar)
+            }
+        }
+        #endif
     }
 }
 
@@ -97,7 +111,7 @@ struct TabRoot<Content: View>: View {
                     }
                 }
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .barTrailing) {
                         Button("설정", systemImage: "gearshape") { router.showSettings = true }
                     }
                 }

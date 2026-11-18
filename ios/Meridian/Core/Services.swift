@@ -1,8 +1,9 @@
+#if os(iOS)
 import BackgroundTasks
+#endif
 import CoreSpotlight
 import Foundation
 import Observation
-import UIKit
 import UserNotifications
 
 /// 푸시 알림: 권한 → APNs 등록 → 서버에 기기 토큰과 알림 설정을 보낸다.
@@ -27,7 +28,7 @@ final class Push {
             let s = await UNUserNotificationCenter.current().notificationSettings()
             status = s.authorizationStatus
             if status == .authorized || status == .provisional {
-                UIApplication.shared.registerForRemoteNotifications()
+                SystemSettings.registerForRemoteNotifications()
             }
         }
     }
@@ -36,7 +37,7 @@ final class Push {
         do {
             let ok = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
             status = ok ? .authorized : .denied
-            if ok { UIApplication.shared.registerForRemoteNotifications() }
+            if ok { SystemSettings.registerForRemoteNotifications() }
         } catch {
             lastError = error.localizedDescription
         }
@@ -72,9 +73,11 @@ enum BackgroundRefresh {
     static let id = "kr.b-612.meridian.refresh"
 
     static func schedule() {
+        #if os(iOS)
         let r = BGAppRefreshTaskRequest(identifier: id)
         r.earliestBeginDate = Date(timeIntervalSinceNow: 45 * 60)
         try? BGTaskScheduler.shared.submit(r)
+        #endif
     }
 
     static func run() async {

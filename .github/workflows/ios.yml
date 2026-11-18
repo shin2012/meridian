@@ -27,6 +27,14 @@ jobs:
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO -IDEBuildingContinueBuildingAfterErrors=YES build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build.log
+      - name: Mac 빌드 (서명 없음)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Meridian.xcodeproj -scheme MeridianMac \
+            -configuration Debug -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO -IDEBuildingContinueBuildingAfterErrors=YES build 2>&1 | tee build-mac.log | grep -E "error:|BUILD" || true
+          grep -q "BUILD SUCCEEDED" build-mac.log
 
   testflight:
     needs: build
@@ -134,3 +142,56 @@ jobs:
         run: |
           xcrun altool --upload-app -t ios -f "$(ls $RUNNER_TEMP/export/*.ipa | head -1)" \
             --apiKey $ASC_KEY_ID --apiIssuer $ASC_ISSUER_ID --show-progress
+
+  testflight_mac:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.testflight
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | grep -viE "beta|_RC" | sort -V | tail -1)"
+      - name: API 키와 macOS 플랫폼 확인
+        run: |
+          mkdir -p ~/private_keys
+          printf '%s\n' "$ASC_KEY_P8" > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          pip3 install --break-system-packages -q pyjwt cryptography
+          ver=$(grep -o "MARKETING_VERSION = [0-9.]*" ios/Meridian.xcodeproj/project.pbxproj | head -1 | awk '{print $3}')
+          python3 ios/ci/asc_prepare_mac.py kr.b-612.meridian "$ver" kr.b-612.meridian.widget
+      - name: Mac 아카이브 (자동 서명)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Meridian.xcodeproj -scheme MeridianMac -configuration Release \
+            -destination 'generic/platform=macOS' -archivePath $RUNNER_TEMP/Mac.xcarchive \
+            DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID \
+            archive 2>&1 | tee archive-mac.log | grep -E "error:|ARCHIVE" || true
+          grep -q "ARCHIVE SUCCEEDED" archive-mac.log
+      - name: pkg 만들기와 업로드
+        run: |
+          python3 -c 'import os,plistlib; plistlib.dump({"method":"app-store-connect","destination":"export","teamID":os.environ["TEAM_ID"],"signingStyle":"automatic","manageAppVersionAndBuildNumber":False},open(os.environ["RUNNER_TEMP"]+"/export.plist","wb"))'
+          xcodebuild -exportArchive -archivePath $RUNNER_TEMP/Mac.xcarchive \
+            -exportOptionsPlist $RUNNER_TEMP/export.plist -exportPath $RUNNER_TEMP/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID
+          ls -la $RUNNER_TEMP/export
+          xcrun altool --upload-app -t macos -f "$(ls $RUNNER_TEMP/export/*.pkg | head -1)" \
+            --apiKey $ASC_KEY_ID --apiIssuer $ASC_ISSUER_ID --show-progress
+      - name: TestFlight 처리 상태 확인
+        run: python3 ios/ci/verify_mac_build.py kr.b-612.meridian ${{ github.run_number }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-logs
+          path: ios/archive-mac.log

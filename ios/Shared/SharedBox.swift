@@ -12,6 +12,9 @@ enum SharedBox {
                                 kSecAttrService as String: service,
                                 kSecAttrAccount as String: key]
         if let g = group, !g.hasPrefix("$(") { q[kSecAttrAccessGroup as String] = g }
+        #if os(macOS)
+        q[kSecUseDataProtectionKeychain as String] = true
+        #endif
         SecItemDelete(q as CFDictionary)
         guard let data else { return }
         q[kSecValueData as String] = data
@@ -31,6 +34,9 @@ enum SharedBox {
                                 kSecReturnData as String: true,
                                 kSecMatchLimit as String: kSecMatchLimitOne]
         if let g = group, !g.hasPrefix("$(") { q[kSecAttrAccessGroup as String] = g }
+        #if os(macOS)
+        q[kSecUseDataProtectionKeychain as String] = true
+        #endif
         var out: AnyObject?
         if SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data { return d }
         #if targetEnvironment(simulator)

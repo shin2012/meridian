@@ -68,7 +68,7 @@ struct SettingsScreen: View {
                         if let e = push.lastError { Text(e).font(.footnote).foregroundStyle(.red) }
                     case .denied:
                         Button("설정 앱에서 알림 켜기") {
-                            if let u = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(u) }
+                            SystemSettings.openNotifications()
                         }
                     default:
                         Button("알림 받기", systemImage: "bell.badge") { Task { await push.requestPermission() } }
@@ -124,7 +124,7 @@ struct SettingsScreen: View {
                 }
             }
             .navigationTitle("설정")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기", systemImage: "xmark") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -201,10 +201,10 @@ struct SetupView: View {
 
                     VStack(spacing: 12) {
                         TextField("서버 주소", text: $server)
-                            .textContentType(.URL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .plainEntry(url: true)
                             .padding(14).glassEffect(.regular, in: .rect(cornerRadius: 16))
                         SecureField("앱 토큰", text: $token)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .plainEntry()
                             .padding(14).glassEffect(.regular, in: .rect(cornerRadius: 16))
                         if let error { Text(error).font(.footnote).foregroundStyle(.red) }
                         Button {

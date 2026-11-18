@@ -7,6 +7,21 @@ I = lambda n: f"AB00000000000000000000{n:02X}"
 
 APP_ID = "kr.b-612.meridian"
 DEPLOY = "26.0"
+MAC_DEPLOY = "26.0"
+
+# 버전은 ios_bump.sh가 pbxproj에서 올린다 → 다시 생성해도 되돌아가지 않게 기존 값을 읽는다
+def _current_version() -> str:
+    import re
+    try:
+        txt = open(os.path.join(ROOT, "Meridian.xcodeproj", "project.pbxproj")).read()
+        m = re.search(r"MARKETING_VERSION = ([0-9.]+);", txt)
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    return "1.0.0"
+
+VERSION = _current_version()
 
 common_target = lambda extra: "\n".join(f"\t\t\t\t{k} = {v};" for k, v in extra.items())
 
@@ -30,7 +45,7 @@ def target_settings(kind: str) -> dict:
             "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": '"UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"',
             "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": '"UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"',
             "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t)',
-            "MARKETING_VERSION": "1.0",
+            "MARKETING_VERSION": VERSION,
             "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}"',
             "PRODUCT_NAME": '"$(TARGET_NAME)"',
             "SUPPORTED_PLATFORMS": '"iphoneos iphonesimulator"',
@@ -48,7 +63,7 @@ def target_settings(kind: str) -> dict:
         "INFOPLIST_FILE": '"Config/Widget-Info.plist"',
         "INFOPLIST_KEY_CFBundleDisplayName": '"자오선"',
         "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t\t"@executable_path/../../Frameworks",\n\t\t\t\t)',
-        "MARKETING_VERSION": "1.0",
+        "MARKETING_VERSION": VERSION,
         "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.widget"',
         "PRODUCT_NAME": '"$(TARGET_NAME)"',
         "SKIP_INSTALL": "YES",
@@ -57,6 +72,47 @@ def target_settings(kind: str) -> dict:
         "SWIFT_VERSION": "5.0",
         "TARGETED_DEVICE_FAMILY": '"1,2"',
     }
+
+
+def mac_settings(kind: str) -> dict:
+    common = {
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": '""',
+        "ENABLE_HARDENED_RUNTIME": "YES",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_KEY_CFBundleDisplayName": '"자오선"',
+        "MACOSX_DEPLOYMENT_TARGET": MAC_DEPLOY,
+        "MARKETING_VERSION": VERSION,
+        "SDKROOT": "macosx",
+        "SUPPORTED_PLATFORMS": "macosx",
+        "SWIFT_EMIT_LOC_STRINGS": "YES",
+        "SWIFT_VERSION": "5.0",
+    }
+    if kind == "app":
+        common.update({
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+            "CODE_SIGN_ENTITLEMENTS": "Config/Mac.entitlements",
+            "COMBINE_HIDPI_IMAGES": "YES",
+            "ENABLE_PREVIEWS": "YES",
+            "INFOPLIST_FILE": '"Config/Mac-Info.plist"',
+            "INFOPLIST_KEY_LSApplicationCategoryType": '"public.app-category.news"',
+            "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/../Frameworks",\n\t\t\t\t)',
+            "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}"',
+            "PRODUCT_MODULE_NAME": "MeridianMac",
+            "PRODUCT_NAME": '"자오선"',
+        })
+    else:
+        common.update({
+            "CODE_SIGN_ENTITLEMENTS": '"Config/MacWidget.entitlements"',
+            "INFOPLIST_FILE": '"Config/MacWidget-Info.plist"',
+            "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/../Frameworks",\n\t\t\t\t\t"@executable_path/../../../../Frameworks",\n\t\t\t\t)',
+            "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.widget"',
+            "PRODUCT_NAME": "MeridianWidgetMac",
+            "SKIP_INSTALL": "YES",
+        })
+    return common
 
 
 def project_settings(debug: bool) -> dict:
@@ -132,6 +188,7 @@ pbx = f"""// !$*UTF8*$!
 
 /* Begin PBXBuildFile section */
 \t\t{I(0x30)} /* MeridianWidget.appex in Embed Foundation Extensions */ = {{isa = PBXBuildFile; fileRef = {I(0x20)} /* MeridianWidget.appex */; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};
+\t\t{I(0x62)} /* MeridianWidgetMac.appex in Embed Foundation Extensions */ = {{isa = PBXBuildFile; fileRef = {I(0x61)} /* MeridianWidgetMac.appex */; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -141,6 +198,12 @@ pbx = f"""// !$*UTF8*$!
 \t\t{I(0x0C)} /* Widget-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Widget-Info.plist"; sourceTree = "<group>"; }};
 \t\t{I(0x0D)} /* Meridian.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Meridian.entitlements; sourceTree = "<group>"; }};
 \t\t{I(0x0E)} /* Widget.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Widget.entitlements; sourceTree = "<group>"; }};
+\t\t{I(0x51)} /* 자오선.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "자오선.app"; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{I(0x61)} /* MeridianWidgetMac.appex */ = {{isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MeridianWidgetMac.appex; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{I(0x70)} /* Mac-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Mac-Info.plist"; sourceTree = "<group>"; }};
+\t\t{I(0x71)} /* Mac.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mac.entitlements; sourceTree = "<group>"; }};
+\t\t{I(0x72)} /* MacWidget-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MacWidget-Info.plist"; sourceTree = "<group>"; }};
+\t\t{I(0x73)} /* MacWidget.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacWidget.entitlements; sourceTree = "<group>"; }};
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -161,6 +224,17 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tname = "Embed Foundation Extensions";
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
+\t\t{I(0x63)} /* Embed Foundation Extensions (Mac) */ = {{
+\t\t\tisa = PBXCopyFilesBuildPhase;
+\t\t\tbuildActionMask = 2147483647;
+\t\t\tdstPath = "";
+\t\t\tdstSubfolderSpec = 13;
+\t\t\tfiles = (
+\t\t\t\t{I(0x62)} /* MeridianWidgetMac.appex in Embed Foundation Extensions */,
+\t\t\t);
+\t\t\tname = "Embed Foundation Extensions";
+\t\t\trunOnlyForDeploymentPostprocessing = 0;
+\t\t}};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXContainerItemProxy section */
@@ -171,6 +245,13 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tremoteGlobalIDString = {I(0x25)};
 \t\t\tremoteInfo = MeridianWidget;
 \t\t}};
+\t\t{I(0x64)} /* PBXContainerItemProxy */ = {{
+\t\t\tisa = PBXContainerItemProxy;
+\t\t\tcontainerPortal = {I(0x09)} /* Project object */;
+\t\t\tproxyType = 1;
+\t\t\tremoteGlobalIDString = {I(0x6C)};
+\t\t\tremoteInfo = MeridianWidgetMac;
+\t\t}};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
@@ -179,11 +260,18 @@ pbx = f"""// !$*UTF8*$!
 \t\t\ttarget = {I(0x25)} /* MeridianWidget */;
 \t\t\ttargetProxy = {I(0x32)} /* PBXContainerItemProxy */;
 \t\t}};
+\t\t{I(0x65)} /* PBXTargetDependency */ = {{
+\t\t\tisa = PBXTargetDependency;
+\t\t\ttarget = {I(0x6C)} /* MeridianWidgetMac */;
+\t\t\ttargetProxy = {I(0x64)} /* PBXContainerItemProxy */;
+\t\t}};
 /* End PBXTargetDependency section */
 
 /* Begin PBXFrameworksBuildPhase section */
 {phase(I(0x03), "PBXFrameworksBuildPhase", "Frameworks")}
 {phase(I(0x23), "PBXFrameworksBuildPhase", "Frameworks")}
+{phase(I(0x53), "PBXFrameworksBuildPhase", "Frameworks")}
+{phase(I(0x66), "PBXFrameworksBuildPhase", "Frameworks")}
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -205,6 +293,10 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x0C)} /* Widget-Info.plist */,
 \t\t\t\t{I(0x0D)} /* Meridian.entitlements */,
 \t\t\t\t{I(0x0E)} /* Widget.entitlements */,
+\t\t\t\t{I(0x70)} /* Mac-Info.plist */,
+\t\t\t\t{I(0x71)} /* Mac.entitlements */,
+\t\t\t\t{I(0x72)} /* MacWidget-Info.plist */,
+\t\t\t\t{I(0x73)} /* MacWidget.entitlements */,
 \t\t\t);
 \t\t\tpath = Config;
 \t\t\tsourceTree = "<group>";
@@ -214,6 +306,8 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tchildren = (
 \t\t\t\t{I(0x01)} /* Meridian.app */,
 \t\t\t\t{I(0x20)} /* MeridianWidget.appex */,
+\t\t\t\t{I(0x51)} /* 자오선.app */,
+\t\t\t\t{I(0x61)} /* MeridianWidgetMac.appex */,
 \t\t\t);
 \t\t\tname = Products;
 \t\t\tsourceTree = "<group>";
@@ -269,6 +363,54 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tproductReference = {I(0x20)} /* MeridianWidget.appex */;
 \t\t\tproductType = "com.apple.product-type.app-extension";
 \t\t}};
+\t\t{I(0x5A)} /* MeridianMac */ = {{
+\t\t\tisa = PBXNativeTarget;
+\t\t\tbuildConfigurationList = {I(0x58)} /* Build configuration list for PBXNativeTarget "MeridianMac" */;
+\t\t\tbuildPhases = (
+\t\t\t\t{I(0x55)} /* Sources */,
+\t\t\t\t{I(0x53)} /* Frameworks */,
+\t\t\t\t{I(0x54)} /* Resources */,
+\t\t\t\t{I(0x63)} /* Embed Foundation Extensions */,
+\t\t\t);
+\t\t\tbuildRules = (
+\t\t\t);
+\t\t\tdependencies = (
+\t\t\t\t{I(0x65)} /* PBXTargetDependency */,
+\t\t\t);
+\t\t\tfileSystemSynchronizedGroups = (
+\t\t\t\t{I(0x02)} /* Meridian */,
+\t\t\t\t{I(0x40)} /* Shared */,
+\t\t\t);
+\t\t\tname = MeridianMac;
+\t\t\tpackageProductDependencies = (
+\t\t\t);
+\t\t\tproductName = MeridianMac;
+\t\t\tproductReference = {I(0x51)} /* 자오선.app */;
+\t\t\tproductType = "com.apple.product-type.application";
+\t\t}};
+\t\t{I(0x6C)} /* MeridianWidgetMac */ = {{
+\t\t\tisa = PBXNativeTarget;
+\t\t\tbuildConfigurationList = {I(0x6B)} /* Build configuration list for PBXNativeTarget "MeridianWidgetMac" */;
+\t\t\tbuildPhases = (
+\t\t\t\t{I(0x68)} /* Sources */,
+\t\t\t\t{I(0x66)} /* Frameworks */,
+\t\t\t\t{I(0x67)} /* Resources */,
+\t\t\t);
+\t\t\tbuildRules = (
+\t\t\t);
+\t\t\tdependencies = (
+\t\t\t);
+\t\t\tfileSystemSynchronizedGroups = (
+\t\t\t\t{I(0x21)} /* MeridianWidget */,
+\t\t\t\t{I(0x40)} /* Shared */,
+\t\t\t);
+\t\t\tname = MeridianWidgetMac;
+\t\t\tpackageProductDependencies = (
+\t\t\t);
+\t\t\tproductName = MeridianWidgetMac;
+\t\t\tproductReference = {I(0x61)} /* MeridianWidgetMac.appex */;
+\t\t\tproductType = "com.apple.product-type.app-extension";
+\t\t}};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -284,6 +426,12 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t\t}};
 \t\t\t\t\t{I(0x25)} = {{
 \t\t\t\t\t\tCreatedOnToolsVersion = 16.0;
+\t\t\t\t\t}};
+\t\t\t\t\t{I(0x5A)} = {{
+\t\t\t\t\t\tCreatedOnToolsVersion = 26.0;
+\t\t\t\t\t}};
+\t\t\t\t\t{I(0x6C)} = {{
+\t\t\t\t\t\tCreatedOnToolsVersion = 26.0;
 \t\t\t\t\t}};
 \t\t\t\t}};
 \t\t\t}};
@@ -303,6 +451,8 @@ pbx = f"""// !$*UTF8*$!
 \t\t\ttargets = (
 \t\t\t\t{I(0x06)} /* Meridian */,
 \t\t\t\t{I(0x25)} /* MeridianWidget */,
+\t\t\t\t{I(0x5A)} /* MeridianMac */,
+\t\t\t\t{I(0x6C)} /* MeridianWidgetMac */,
 \t\t\t);
 \t\t}};
 /* End PBXProject section */
@@ -310,11 +460,15 @@ pbx = f"""// !$*UTF8*$!
 /* Begin PBXResourcesBuildPhase section */
 {phase(I(0x08), "PBXResourcesBuildPhase", "Resources")}
 {phase(I(0x24), "PBXResourcesBuildPhase", "Resources")}
+{phase(I(0x54), "PBXResourcesBuildPhase", "Resources")}
+{phase(I(0x67), "PBXResourcesBuildPhase", "Resources")}
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 {phase(I(0x07), "PBXSourcesBuildPhase", "Sources")}
 {phase(I(0x22), "PBXSourcesBuildPhase", "Sources")}
+{phase(I(0x55), "PBXSourcesBuildPhase", "Sources")}
+{phase(I(0x68), "PBXSourcesBuildPhase", "Sources")}
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -324,6 +478,10 @@ pbx = f"""// !$*UTF8*$!
 {config(I(0x15), "Release", target_settings("app"))}
 {config(I(0x26), "Debug", target_settings("share"))}
 {config(I(0x27), "Release", target_settings("share"))}
+{config(I(0x56), "Debug", mac_settings("app"))}
+{config(I(0x57), "Release", mac_settings("app"))}
+{config(I(0x69), "Debug", mac_settings("widget"))}
+{config(I(0x6A), "Release", mac_settings("widget"))}
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -350,6 +508,24 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tbuildConfigurations = (
 \t\t\t\t{I(0x26)} /* Debug */,
 \t\t\t\t{I(0x27)} /* Release */,
+\t\t\t);
+\t\t\tdefaultConfigurationIsVisible = 0;
+\t\t\tdefaultConfigurationName = Release;
+\t\t}};
+\t\t{I(0x58)} /* Build configuration list for PBXNativeTarget "MeridianMac" */ = {{
+\t\t\tisa = XCConfigurationList;
+\t\t\tbuildConfigurations = (
+\t\t\t\t{I(0x56)} /* Debug */,
+\t\t\t\t{I(0x57)} /* Release */,
+\t\t\t);
+\t\t\tdefaultConfigurationIsVisible = 0;
+\t\t\tdefaultConfigurationName = Release;
+\t\t}};
+\t\t{I(0x6B)} /* Build configuration list for PBXNativeTarget "MeridianWidgetMac" */ = {{
+\t\t\tisa = XCConfigurationList;
+\t\t\tbuildConfigurations = (
+\t\t\t\t{I(0x69)} /* Debug */,
+\t\t\t\t{I(0x6A)} /* Release */,
 \t\t\t);
 \t\t\tdefaultConfigurationIsVisible = 0;
 \t\t\tdefaultConfigurationName = Release;
@@ -387,8 +563,12 @@ scheme = f"""<?xml version="1.0" encoding="UTF-8"?>
 </Scheme>
 """
 
+mac_scheme = (scheme.replace(I(0x06), I(0x5A)).replace('BuildableName = "Meridian.app"', 'BuildableName = "자오선.app"')
+              .replace('BlueprintName = "Meridian"', 'BlueprintName = "MeridianMac"'))
+
 proj = os.path.join(ROOT, "Meridian.xcodeproj")
 os.makedirs(os.path.join(proj, "xcshareddata", "xcschemes"), exist_ok=True)
 open(os.path.join(proj, "project.pbxproj"), "w").write(pbx)
 open(os.path.join(proj, "xcshareddata", "xcschemes", "Meridian.xcscheme"), "w").write(scheme)
+open(os.path.join(proj, "xcshareddata", "xcschemes", "MeridianMac.xcscheme"), "w").write(mac_scheme)
 print("ok")

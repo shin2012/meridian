@@ -95,14 +95,14 @@ struct ImageBox: View {
 /// 표시 크기에 맞게 줄여(ImageIO 썸네일) 메모리 캐시에 두고 다시 쓴다.
 struct RemoteImage: View {
     let url: URL
-    @State private var image: UIImage?
+    @State private var image: PlatformImage?
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 Color.secondary.opacity(0.08)
                 if let image {
-                    Image(uiImage: image).resizable().scaledToFill()
+                    Image(platformImage: image).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
                         .transition(.opacity)
                 }
@@ -120,12 +120,12 @@ struct RemoteImage: View {
 /// 줄인 사진 메모리 캐시 + 디스크(URLCache) 캐시. 같은 사진을 동시에 여러 번 받지 않는다.
 actor ImagePipeline {
     static let shared = ImagePipeline()
-    private let memory: NSCache<NSString, UIImage> = {
-        let c = NSCache<NSString, UIImage>()
+    private let memory: NSCache<NSString, PlatformImage> = {
+        let c = NSCache<NSString, PlatformImage>()
         c.totalCostLimit = 48 << 20          // 약 48MB(줄인 비트맵 기준)
         return c
     }()
-    private var running: [String: Task<UIImage?, Never>] = [:]
+    private var running: [String: Task<PlatformImage?, Never>] = [:]
     private let session: URLSession = {
         let c = URLSessionConfiguration.default
         c.urlCache = URLCache(memoryCapacity: 8 << 20, diskCapacity: 200 << 20)
@@ -135,12 +135,12 @@ actor ImagePipeline {
         return URLSession(configuration: c)
     }()
 
-    func image(_ url: URL, maxPoints: CGFloat) async -> UIImage? {
+    func image(_ url: URL, maxPoints: CGFloat) async -> PlatformImage? {
         let px = Int(min(maxPoints, 1200) * 3)          // 화면 배율 3 기준, 상한 3600px
         let key = "\(url.absoluteString)#\(px)" as NSString
         if let hit = memory.object(forKey: key) { return hit }
         if let t = running[key as String] { return await t.value }
-        let t = Task<UIImage?, Never> { [session] in
+        let t = Task<PlatformImage?, Never> { [session] in
             var req = URLRequest(url: url)
             req.setValue(nil, forHTTPHeaderField: "Referer")
             guard let (data, _) = try? await session.data(for: req) else { return nil }
@@ -150,13 +150,17 @@ actor ImagePipeline {
         let img = await t.value
         running[key as String] = nil
         if let img {
+            #if os(iOS)
             let cost = Int(img.size.width * img.size.height * img.scale * img.scale * 4)
+            #else
+            let cost = Int(img.size.width * img.size.height * 4)
+            #endif
             memory.setObject(img, forKey: key, cost: cost)
         }
         return img
     }
 
-    nonisolated static func downsample(_ data: Data, maxPixel: Int) -> UIImage? {
+    nonisolated static func downsample(_ data: Data, maxPixel: Int) -> PlatformImage? {
         guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -165,7 +169,11 @@ actor ImagePipeline {
             kCGImageSourceThumbnailMaxPixelSize: maxPixel,
         ]
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        #if os(iOS)
         return UIImage(cgImage: cg)
+        #else
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        #endif
     }
 }
 

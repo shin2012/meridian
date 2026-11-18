@@ -49,7 +49,7 @@ struct DigestScreen: View {
         .navigationTitle("자오선")
         .navigationSubtitle(store.digest.map { "최근 24시간 · \(MeridianDate.ago($0.createdAt)) 분석" } ?? "")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .barLeading) {
                 Menu {
                     Button("주요 뉴스 브리핑 듣기", systemImage: "headphones") {
                         if let d = store.digest { reader.playBriefing(d) }
@@ -212,9 +212,9 @@ struct EventScreen: View {
             if loading && items.isEmpty { LoadingRow() }
             if let error, items.isEmpty { Text(error).foregroundStyle(.secondary) }
         }
-        .listStyle(.insetGrouped)
+        .groupedList()
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
         .task { await load() }
         .refreshable { await Task { await load() }.value }
         .onChange(of: items) { _, v in store.requestTitles(v) }
